@@ -1,45 +1,66 @@
+  var express = require("express");
+  var bodyParser = require("body-parser");
+  var mongodb = require("mongodb");
+  var ObjectID = mongodb.ObjectID;
 
-var express  = require('express'),
-    mongoose = require('mongoose'),
-    bodyParser = require('body-parser'),
+  var BRIGHTNESS_COLLECTION = "brightness";
 
-    // Mongoose Schema definition
-    Schema = new mongoose.Schema({
-      id       : String,
-      title    : String,
-      completed: Boolean
-    }),
+  var app = express();
+  app.use(bodyParser.json());
 
-    Todo = mongoose.model('Todo', Schema);
+  // Create a database variable outside of the database connection callback to reuse the connection pool in your app.
+  var db;
 
-MONGOLAB_URI="mongodb://heroku_7x1v9nrh:291c34epnjjk272us7r3ru85p6@ds159493.mlab.com:59493/heroku_7x1v9nrh";
+  // Connect to the database before starting the application server.
+  mongodb.MongoClient.connect(process.env.MONGODB_URI, function (err, database) {
+    if (err) {
+      console.log(err);
+      process.exit(1);
+    }
 
-mongoose.connect(process.env.MONGOLAB_URI, function (error) {
-    if (error) console.error(error);
-    else console.log('mongo connected');
-});
+    // Save database object from the callback for reuse.
+    db = database;
+    console.log("Database connection ready");
 
-express()
-  .use(bodyParser.json()) // support json encoded bodies
-  .use(bodyParser.urlencoded({ extended: true })) // support encoded bodies
-
-  .get('/api', function (req, res) {
-    res.json(200, {msg: 'OK' });
-  })
-
-  .get('/api/brightness', function (req, res) {
-    Todo.find( function ( err, todos ){
-      res.json(200, todos);
+    // Initialize the app.
+    var server = app.listen(process.env.PORT || 8080, function () {
+      var port = server.address().port;
+      console.log("App now running on port", port);
     });
-  })
+  });
 
-  .post('/api/brightness', function (req, res) {
-    var brightness = new Brightness( req.body );
-    brightness.id = brightness._id;
-    todo.save(function (err) {
-      res.json(200, todo);
+  // BRIGHTNESS API ROUTES BELOW
+
+  // Generic error handler used by all endpoints.
+  function handleError(res, reason, message, code) {
+    console.log("ERROR: " + reason);
+    res.status(code || 500).json({"error": message});
+  }
+
+
+  app.get("/api/brightness", function(req, res) {
+    db.collection(BRIGHTNESS_COLLECTION).find({}).toArray(function(err, docs) {
+      if (err) {
+        handleError(res, err.message, "Failed to get brightness.");
+      } else {
+        res.status(200).json(docs);
+      }
     });
-  })
+  });
 
-  .use(express.static(__dirname + '/'))
-  .listen(process.env.PORT || 5000);
+  app.post("/api/brightness", function(req, res) {
+    var newBrightness = req.body;
+    newBrightness.createDate = new Date();
+
+    if (!req.body.brightness) {
+      handleError(res, "Invalid user input", "Must provide a brightness.", 400);
+    }
+
+    db.collection(BRIGHTNESS_COLLECTION).insertOne(newBrightness, function(err, doc) {
+      if (err) {
+        handleError(res, err.message, "Failed to update brightness.");
+      } else {
+        res.status(201).json(doc.ops[0]);
+      }
+    });
+  });
