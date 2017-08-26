@@ -48,19 +48,16 @@
     });
   });
 
-  app.post("/api/brightness", function(req, res) {
-    var newBrightness = req.body;
-    newBrightness.createDate = new Date();
+  app.put("/api/brightness/:id", function(req, res) {
+  var updateDoc = req.body;
+  delete updateDoc._id;
 
-    if (!req.body.brightness) {
-      handleError(res, "Invalid user input", "Must provide a brightness.", 400);
+  db.collection(BRIGHTNESS_COLLECTION).updateOne({_id: new ObjectID(req.params.id)}, updateDoc, function(err, doc) {
+    if (err) {
+      handleError(res, err.message, "Failed to update brightness");
+    } else {
+      updateDoc._id = req.params.id;
+      res.status(200).json(updateDoc);
     }
-
-    db.collection(BRIGHTNESS_COLLECTION).insertOne(newBrightness, function(err, doc) {
-      if (err) {
-        handleError(res, err.message, "Failed to update brightness.");
-      } else {
-        res.status(201).json(doc.ops[0]);
-      }
-    });
   });
+});
